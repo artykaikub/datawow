@@ -1,0 +1,122 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "DataWow Audit Service API",
+    "description": "Audit log microservice — provides admin audit trail of all system actions.",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4001",
+      "description": "Local Development"
+    }
+  ],
+  "paths": {
+    "/api/audit-logs": {
+      "get": {
+        "tags": ["AuditLogs"],
+        "operationId": "getAuditLogs",
+        "summary": "Get admin audit logs",
+        "description": "Returns paginated audit trail of all admin actions.",
+        "security": [{ "JWT": [] }],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1 },
+            "description": "Page number"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 50, "maximum": 200 },
+            "description": "Items per page (max 200)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated audit logs.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuditLogPaginatedResponse" }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized — missing or invalid JWT." },
+          "403": { "description": "Forbidden — Admin role required." }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "healthCheck",
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Service is healthy.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "JWT": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "AuditLogEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "action": { "type": "string", "example": "CREATE_CONCERT" },
+          "entity": { "type": "string", "example": "concert" },
+          "entityId": { "type": "string", "format": "uuid", "nullable": true },
+          "details": { "type": "object", "nullable": true },
+          "performedBy": { "type": "string", "format": "uuid" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "performer": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "email": { "type": "string", "format": "email" },
+              "fullName": { "type": "string" }
+            }
+          }
+        }
+      },
+      "AuditLogPaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AuditLogEntry" }
+          },
+          "total": { "type": "integer" },
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "service": { "type": "string", "example": "audit-service" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

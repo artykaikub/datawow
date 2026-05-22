@@ -1,0 +1,414 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "DataWow Concert Tickets API",
+    "description": "RESTful API for free concert ticket reservation. Supports JWT authentication, role-based access (Admin/User), Redis caching, rate limiting, and Kafka-based concurrency control.",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local Development"
+    }
+  ],
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "operationId": "register",
+        "summary": "Register a new user",
+        "description": "Creates a new user account and returns a JWT token. Role is always \"user\".",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RegisterDto" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResponse" }
+              }
+            }
+          },
+          "400": { "description": "Validation error." },
+          "409": { "description": "Registration failed." },
+          "429": { "description": "Too many registration attempts." }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "operationId": "login",
+        "summary": "Login with email and password",
+        "description": "Authenticates the user and returns a JWT token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginDto" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResponse" }
+              }
+            }
+          },
+          "401": { "description": "Invalid email or password." },
+          "429": { "description": "Too many login attempts." }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "operationId": "getProfile",
+        "summary": "Get current user profile",
+        "description": "Returns the authenticated user's profile.",
+        "security": [{ "JWT": [] }],
+        "responses": {
+          "200": {
+            "description": "User profile.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserProfile" }
+              }
+            }
+          },
+          "401": { "description": "Invalid or missing JWT token." }
+        }
+      }
+    },
+    "/api/concerts": {
+      "get": {
+        "tags": ["Concerts"],
+        "operationId": "findAllConcerts",
+        "summary": "List all concerts",
+        "description": "Returns all concerts with reservation stats. Cached in Redis (30s TTL).",
+        "security": [{ "JWT": [] }],
+        "responses": {
+          "200": {
+            "description": "List of concerts with stats.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ConcertWithStats" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Concerts"],
+        "operationId": "createConcert",
+        "summary": "Create a concert (Admin)",
+        "description": "Creates a new concert listing.",
+        "security": [{ "JWT": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateConcertDto" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Concert created.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Concert" }
+              }
+            }
+          },
+          "400": { "description": "Validation error." },
+          "403": { "description": "Forbidden — Admin role required." }
+        }
+      }
+    },
+    "/api/concerts/{id}": {
+      "get": {
+        "tags": ["Concerts"],
+        "operationId": "findOneConcert",
+        "summary": "Get a single concert",
+        "security": [{ "JWT": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "description": "Concert UUID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Concert details.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Concert" }
+              }
+            }
+          },
+          "404": { "description": "Concert not found." }
+        }
+      },
+      "delete": {
+        "tags": ["Concerts"],
+        "operationId": "deleteConcert",
+        "summary": "Delete a concert (Admin)",
+        "security": [{ "JWT": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "description": "Concert UUID"
+          }
+        ],
+        "responses": {
+          "204": { "description": "Concert deleted." },
+          "403": { "description": "Forbidden — Admin role required." },
+          "404": { "description": "Concert not found." }
+        }
+      }
+    },
+    "/api/reservations/{concertId}": {
+      "post": {
+        "tags": ["Reservations"],
+        "operationId": "reserveSeat",
+        "summary": "Reserve a seat (User)",
+        "description": "Reserves a seat for the authenticated user.",
+        "security": [{ "JWT": [] }],
+        "parameters": [
+          {
+            "name": "concertId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "description": "Concert UUID"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Reservation created (sync).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Reservation" }
+              }
+            }
+          },
+          "202": {
+            "description": "Reservation pending (async Kafka).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReservationPending" }
+              }
+            }
+          },
+          "400": { "description": "No seats available." },
+          "404": { "description": "Concert not found." },
+          "409": { "description": "Already reserved or pending." },
+          "429": { "description": "Rate limit exceeded." }
+        }
+      },
+      "delete": {
+        "tags": ["Reservations"],
+        "operationId": "cancelReservation",
+        "summary": "Cancel a reservation (User)",
+        "security": [{ "JWT": [] }],
+        "parameters": [
+          {
+            "name": "concertId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "description": "Concert UUID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reservation cancelled.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CancelResponse" }
+              }
+            }
+          },
+          "404": { "description": "No active reservation found." }
+        }
+      }
+    },
+    "/api/reservations/me": {
+      "get": {
+        "tags": ["Reservations"],
+        "operationId": "getMyReservations",
+        "summary": "My reservation history (User)",
+        "security": [{ "JWT": [] }],
+        "responses": {
+          "200": {
+            "description": "User reservation history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/UserReservation" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "JWT": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "RegisterDto": {
+        "type": "object",
+        "required": ["fullName", "email", "password"],
+        "properties": {
+          "fullName": { "type": "string", "example": "John Doe" },
+          "email": { "type": "string", "format": "email", "example": "john@example.com" },
+          "password": { "type": "string", "minLength": 8, "maxLength": 72, "example": "MyP@ss123" }
+        }
+      },
+      "LoginDto": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email", "example": "john@example.com" },
+          "password": { "type": "string", "example": "password123" }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": { "type": "string" },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "email": { "type": "string", "format": "email" },
+              "fullName": { "type": "string" },
+              "role": { "type": "string", "enum": ["admin", "user"] }
+            }
+          }
+        }
+      },
+      "UserProfile": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "email": { "type": "string", "format": "email" },
+          "fullName": { "type": "string" },
+          "role": { "type": "string", "enum": ["admin", "user"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateConcertDto": {
+        "type": "object",
+        "required": ["name", "description", "totalSeats"],
+        "properties": {
+          "name": { "type": "string", "example": "Summer Music Festival" },
+          "description": { "type": "string", "example": "An amazing outdoor concert" },
+          "totalSeats": { "type": "integer", "minimum": 1, "example": 500 }
+        }
+      },
+      "Concert": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "totalSeats": { "type": "integer" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ConcertWithStats": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "totalSeats": { "type": "integer" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "reservedSeats": { "type": "integer" },
+          "cancelledSeats": { "type": "integer" },
+          "availableSeats": { "type": "integer" }
+        }
+      },
+      "Reservation": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string", "format": "uuid" },
+          "concertId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["pending", "reserved", "rejected", "cancelled"] },
+          "rejectedReason": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "cancelledAt": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "ReservationPending": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string", "format": "uuid" },
+          "concertId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["pending"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "message": { "type": "string" },
+          "statusCode": { "type": "integer", "example": 202 }
+        }
+      },
+      "CancelResponse": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "affected": { "type": "integer" }
+        }
+      },
+      "UserReservation": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["pending", "reserved", "rejected", "cancelled"] },
+          "rejectedReason": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "cancelledAt": { "type": "string", "format": "date-time", "nullable": true },
+          "concert": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "name": { "type": "string" },
+              "totalSeats": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

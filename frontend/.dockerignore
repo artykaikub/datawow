@@ -1,0 +1,9 @@
+node_modules
+.next
+.env*
+playwright-report
+test-results
+e2e
+*.spec.ts
+*.test.ts
+*.test.tsx
