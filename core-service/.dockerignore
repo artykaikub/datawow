@@ -1,0 +1,11 @@
+node_modules
+pnpm-workspace.yaml
+dist
+coverage
+.git
+.env
+.env.*
+!.env.example
+*.md
+*.log
+.DS_Store
