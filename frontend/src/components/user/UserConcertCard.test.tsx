@@ -125,4 +125,30 @@ describe('UserConcertCard', () => {
     expect(screen.getByText('5,000')).toBeInTheDocument();
     expect(screen.getByText('/ 10,000')).toBeInTheDocument();
   });
+
+  it('should disable Reserve button and show "Sold Out" when no seats available', () => {
+    render(
+      <UserConcertCard
+        concert={{ ...baseConcert, availableSeats: 0, isReserved: false }}
+        onReserve={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    const btn = screen.getByRole('button', { name: 'Sold Out' });
+    expect(btn).toBeDisabled();
+  });
+
+  it('should still show Cancel button when reserved even if no seats left', () => {
+    render(
+      <UserConcertCard
+        concert={{ ...baseConcert, availableSeats: 0, isReserved: true }}
+        onReserve={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeDisabled();
+  });
 });

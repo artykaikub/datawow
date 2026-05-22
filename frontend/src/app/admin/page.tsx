@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,10 +8,10 @@ import { StatsOverview } from "@/components/admin/StatsOverview";
 import { ConcertCard, type Concert } from "@/components/admin/ConcertCard";
 import { CreateConcertForm } from "@/components/admin/CreateConcertForm";
 import { DeleteConcertDialog } from "@/components/admin/DeleteConcertDialog";
-import { api } from "@/api";
 import type { ConcertWithStats } from "@/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { useLanguage } from "@/components/providers/LanguageProvider";
+import { useConcerts, useDeleteConcert } from "@/hooks/use-api";
 
 /** H-3 fix: Map API data to ConcertCard shape (now includes stats) */
 function toAdminConcert(c: ConcertWithStats): Concert {
@@ -26,46 +26,31 @@ function toAdminConcert(c: ConcertWithStats): Concert {
 }
 
 export default function AdminHomePage() {
-  const [concerts, setConcerts] = useState<Concert[]>([]);
-  const [stats, setStats] = useState({ totalSeats: 0, reserved: 0, cancelled: 0 });
   const [deleteTarget, setDeleteTarget] = useState<Concert | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const { t } = useLanguage();
 
-  const fetchConcerts = useCallback(async () => {
-    try {
-      const data = await api.findAllConcerts();
-      setConcerts(data.map(toAdminConcert));
-      setStats({
-        totalSeats: data.reduce((sum, c) => sum + (c.totalSeats ?? 0), 0),
-        reserved: data.reduce((sum, c) => sum + (c.reservedSeats ?? 0), 0),
-        cancelled: data.reduce((sum, c) => sum + (c.cancelledSeats ?? 0), 0),
-      });
-    } catch {
-      toast.error(t("admin.load_error"));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [t]);
+  const { data: concertsData, isLoading } = useConcerts();
+  const deleteMutation = useDeleteConcert();
 
-  useEffect(() => {
-    fetchConcerts();
-  }, [fetchConcerts]);
+  const concerts = (concertsData ?? []).map(toAdminConcert);
+  const stats = {
+    totalSeats: (concertsData ?? []).reduce((sum, c) => sum + (c.totalSeats ?? 0), 0),
+    reserved: (concertsData ?? []).reduce((sum, c) => sum + (c.reservedSeats ?? 0), 0),
+    cancelled: (concertsData ?? []).reduce((sum, c) => sum + (c.cancelledSeats ?? 0), 0),
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    setIsDeleting(true);
-    try {
-      await api.deleteConcert(deleteTarget.id);
-      setConcerts((prev) => prev.filter((c) => c.id !== deleteTarget.id));
-      toast.success(t("admin.delete_success"));
-    } catch (err) {
-      toast.error(getErrorMessage(err, t("admin.delete_error")));
-    } finally {
-      setIsDeleting(false);
-      setDeleteTarget(null);
-    }
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success(t("admin.delete_success"));
+        setDeleteTarget(null);
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, t("admin.delete_error")));
+        setDeleteTarget(null);
+      },
+    });
   };
 
   if (isLoading) {
@@ -132,7 +117,7 @@ export default function AdminHomePage() {
         </TabsContent>
 
         <TabsContent value="create" className="mt-6">
-          <CreateConcertForm onCreated={fetchConcerts} />
+          <CreateConcertForm />
         </TabsContent>
       </Tabs>
 
@@ -141,7 +126,7 @@ export default function AdminHomePage() {
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         onConfirm={handleDelete}
-        isDeleting={isDeleting}
+        isDeleting={deleteMutation.isPending}
       />
     </div>
   );

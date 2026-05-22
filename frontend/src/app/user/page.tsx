@@ -1,16 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   UserConcertCard,
   type UserConcert,
 } from "@/components/user/UserConcertCard";
-import { api } from "@/api";
 import type { ConcertWithStats } from "@/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { Loader2 } from "lucide-react";
 import { useLanguage } from "@/components/providers/LanguageProvider";
+import { useConcerts, useMyReservations, useReserveSeat, useCancelReservation } from "@/hooks/use-api";
 
 /** Map API concert to component-friendly shape */
 function toConcert(
@@ -28,70 +28,56 @@ function toConcert(
 }
 
 export default function UserHomePage() {
-  const [concerts, setConcerts] = useState<UserConcert[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   /** H-4: Track which concert ID is currently processing */
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const { t } = useLanguage();
 
-  const fetchConcerts = useCallback(async () => {
-    try {
-      const [concertList, myReservations] = await Promise.all([
-        api.findAllConcerts(),
-        api.getMyReservations(),
-      ]);
+  const { data: concertList, isLoading: concertsLoading } = useConcerts();
+  const { data: myReservations, isLoading: reservationsLoading } = useMyReservations();
+  const reserveMutation = useReserveSeat();
+  const cancelMutation = useCancelReservation();
 
-      const reservedIds = new Set(
-        myReservations
-          .filter((r) => r.status === "reserved" || r.status === "pending")
-          .map((r) => r.concert?.id!)
-          .filter(Boolean)
-      );
+  const isLoading = concertsLoading || reservationsLoading;
 
-      setConcerts(concertList.map((c) => toConcert(c, reservedIds)));
-    } catch {
-      toast.error(t("user.load_error"));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [t]);
+  const concerts = useMemo(() => {
+    if (!concertList) return [];
+    const reservedIds = new Set(
+      (myReservations ?? [])
+        .filter((r) => r.status === "reserved" || r.status === "pending")
+        .map((r) => r.concert?.id!)
+        .filter(Boolean)
+    );
+    return concertList.map((c) => toConcert(c, reservedIds));
+  }, [concertList, myReservations]);
 
-  useEffect(() => {
-    fetchConcerts();
-  }, [fetchConcerts]);
-
-  const handleReserve = async (concert: UserConcert) => {
+  const handleReserve = (concert: UserConcert) => {
     setActionLoadingId(concert.id);
-    try {
-      await api.reserveSeat(concert.id);
-      setConcerts((prev) =>
-        prev.map((c) =>
-          c.id === concert.id ? { ...c, isReserved: true } : c
-        )
-      );
-      toast.success(t("user.reserved_success"));
-    } catch (err) {
-      toast.error(getErrorMessage(err, t("user.reserve_error")));
-    } finally {
-      setActionLoadingId(null);
-    }
+    reserveMutation.mutate(concert.id, {
+      onSuccess: () => {
+        toast.success(t("user.reserved_success"));
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, t("user.reserve_error")));
+      },
+      onSettled: () => {
+        setActionLoadingId(null);
+      },
+    });
   };
 
-  const handleCancel = async (concert: UserConcert) => {
+  const handleCancel = (concert: UserConcert) => {
     setActionLoadingId(concert.id);
-    try {
-      await api.cancelReservation(concert.id);
-      setConcerts((prev) =>
-        prev.map((c) =>
-          c.id === concert.id ? { ...c, isReserved: false } : c
-        )
-      );
-      toast.success(t("user.cancel_success"));
-    } catch (err) {
-      toast.error(getErrorMessage(err, t("user.cancel_error")));
-    } finally {
-      setActionLoadingId(null);
-    }
+    cancelMutation.mutate(concert.id, {
+      onSuccess: () => {
+        toast.success(t("user.cancel_success"));
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, t("user.cancel_error")));
+      },
+      onSettled: () => {
+        setActionLoadingId(null);
+      },
+    });
   };
 
   if (isLoading) {

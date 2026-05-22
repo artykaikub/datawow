@@ -2,6 +2,11 @@ import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 import { translations } from '@/lib/i18n';
 
+// Mock QueryProvider — provides a fresh QueryClient for tests
+vi.mock('@/components/providers/QueryProvider', () => ({
+  QueryProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 // Mock LanguageProvider — always return English translations
 vi.mock('@/components/providers/LanguageProvider', () => ({
   useLanguage: () => ({

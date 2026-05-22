@@ -1,11 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { toast } from "sonner";
+import React from "react";
 import { Loader2, Music, Calendar, Tag } from "lucide-react";
-import { api } from "@/api";
-import type { UserReservation } from "@/api";
 import { useLanguage } from "@/components/providers/LanguageProvider";
+import { useMyReservations } from "@/hooks/use-api";
 
 const STATUS_STYLES: Record<string, string> = {
   reserved: "bg-emerald-50 text-emerald-700 border border-emerald-200",
@@ -15,23 +13,8 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function UserHistoryPage() {
-  const [reservations, setReservations] = useState<UserReservation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const { t } = useLanguage();
-
-  useEffect(() => {
-    async function fetchHistory() {
-      try {
-        const result = await api.getMyReservations();
-        setReservations(result ?? []);
-      } catch {
-        toast.error(t("user.history_load_error"));
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchHistory();
-  }, []);
+  const { data: reservations = [], isLoading } = useMyReservations();
 
   if (isLoading) {
     return (

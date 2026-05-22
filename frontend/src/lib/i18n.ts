@@ -69,6 +69,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "user.load_error": "Failed to load concerts",
     "user.reserve_error": "Failed to reserve",
     "user.cancel_error": "Failed to cancel reservation",
+    "user.sold_out": "Sold Out",
 
     // ─── Admin Dashboard ───
     "admin.home": "Home",
@@ -219,6 +220,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "user.load_error": "โหลดคอนเสิร์ตไม่สำเร็จ",
     "user.reserve_error": "จองไม่สำเร็จ",
     "user.cancel_error": "ยกเลิกการจองไม่สำเร็จ",
+    "user.sold_out": "เต็มแล้ว",
 
     // ─── Admin Dashboard ───
     "admin.home": "หน้าแรก",

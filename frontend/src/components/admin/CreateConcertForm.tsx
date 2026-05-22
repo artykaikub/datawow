@@ -7,42 +7,39 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { api } from "@/api";
 import { getErrorMessage } from "@/lib/api-error";
 import { useLanguage } from "@/components/providers/LanguageProvider";
+import { useCreateConcert } from "@/hooks/use-api";
 
-interface CreateConcertFormProps {
-  onCreated?: () => void;
-}
-
-export function CreateConcertForm({ onCreated }: CreateConcertFormProps) {
+export function CreateConcertForm() {
   const [name, setName] = useState("");
   const [totalSeats, setTotalSeats] = useState("");
   const [description, setDescription] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const { t } = useLanguage();
+  const createMutation = useCreateConcert();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !totalSeats.trim() || !description.trim()) return;
 
-    setIsLoading(true);
-    try {
-      await api.createConcert({
+    createMutation.mutate(
+      {
         name: name.trim(),
         description: description.trim(),
         totalSeats: Number(totalSeats),
-      });
-      toast.success(t("admin.create_success"));
-      setName("");
-      setTotalSeats("");
-      setDescription("");
-      onCreated?.();
-    } catch (err) {
-      toast.error(getErrorMessage(err, t("admin.create_error")));
-    } finally {
-      setIsLoading(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          toast.success(t("admin.create_success"));
+          setName("");
+          setTotalSeats("");
+          setDescription("");
+        },
+        onError: (err) => {
+          toast.error(getErrorMessage(err, t("admin.create_error")));
+        },
+      }
+    );
   };
 
   const isValid = name.trim() && totalSeats.trim() && description.trim();
@@ -126,10 +123,10 @@ export function CreateConcertForm({ onCreated }: CreateConcertFormProps) {
         <div className="flex justify-end pt-3">
           <Button
             type="submit"
-            disabled={isLoading || !isValid}
+            disabled={createMutation.isPending || !isValid}
             className="gap-2 bg-brand hover:bg-brand-dark text-white px-6 h-10 rounded-xl shadow-md shadow-brand/25 transition-all duration-200 hover:shadow-lg hover:shadow-brand/35 disabled:opacity-40 disabled:shadow-none"
           >
-            {isLoading ? (
+            {createMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Save className="size-4" />

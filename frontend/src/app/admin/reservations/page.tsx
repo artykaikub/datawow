@@ -1,14 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { toast } from "sonner";
+import React, { useState, useEffect } from "react";
 import {
   Loader2, User, Clock, Ticket, XCircle,
   CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Search,
 } from "lucide-react";
-import { api } from "@/api";
-import type { AdminReservation } from "@/api";
 import { useLanguage } from "@/components/providers/LanguageProvider";
+import { useAdminReservations } from "@/hooks/use-api";
 
 const STATUS_STYLES: Record<string, { bg: string; icon: React.ReactNode; label: string }> = {
   reserved: {
@@ -36,13 +34,10 @@ const STATUS_STYLES: Record<string, { bg: string; icon: React.ReactNode; label: 
 const PAGE_SIZE = 20;
 
 export default function AdminReservationsPage() {
-  const [reservations, setReservations] = useState<AdminReservation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [meta, setMeta] = useState({ total: 0, totalPages: 1 });
   const { t } = useLanguage();
 
   // Debounce search
@@ -51,32 +46,20 @@ export default function AdminReservationsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const fetchReservations = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const result = await api.getAllReservations({
-        page,
-        limit: PAGE_SIZE,
-        status: filter || undefined,
-        search: debouncedSearch || undefined,
-      });
-      setReservations(result.data);
-      setMeta({ total: result.meta.total, totalPages: result.meta.totalPages });
-    } catch {
-      toast.error("Failed to load reservation history");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, filter, debouncedSearch]);
-
-  useEffect(() => {
-    fetchReservations();
-  }, [fetchReservations]);
-
   // Reset to page 1 when filter/search changes
   useEffect(() => {
     setPage(1);
   }, [filter, debouncedSearch]);
+
+  const { data, isLoading, isFetching } = useAdminReservations({
+    page,
+    limit: PAGE_SIZE,
+    status: filter || undefined,
+    search: debouncedSearch || undefined,
+  });
+
+  const reservations = data?.data ?? [];
+  const meta = data?.meta ?? { total: 0, totalPages: 1 };
 
   return (
     <div className="space-y-6">
@@ -137,7 +120,7 @@ export default function AdminReservationsPage() {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+        <div className={`rounded-2xl border border-gray-200 bg-white overflow-hidden transition-opacity ${isFetching ? "opacity-60" : ""}`}>
           <div className="overflow-x-auto">
             {/* Table header */}
             <div className="grid grid-cols-[180px_1fr_1fr_120px] gap-4 px-6 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[700px]">

@@ -28,6 +28,7 @@ export function UserConcertCard({
   isActionLoading = false,
 }: UserConcertCardProps) {
   const { t } = useLanguage();
+  const isSoldOut = concert.availableSeats <= 0 && !concert.isReserved;
 
   return (
     <div className="group rounded-2xl border border-gray-200 bg-white p-6 transition-all duration-200 hover:shadow-md hover:border-gray-300">
@@ -70,12 +71,18 @@ export function UserConcertCard({
         ) : (
           <Button
             size="sm"
-            className="rounded-lg h-9 px-5 text-[13px] font-semibold bg-brand hover:bg-brand-dark text-white shadow-sm"
+            className={`rounded-lg h-9 px-5 text-[13px] font-semibold shadow-sm ${
+              isSoldOut
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-brand hover:bg-brand-dark text-white"
+            }`}
             onClick={() => onReserve(concert)}
-            disabled={isActionLoading}
+            disabled={isActionLoading || isSoldOut}
           >
             {isActionLoading ? (
               <Loader2 className="size-4 animate-spin" />
+            ) : isSoldOut ? (
+              t("user.sold_out")
             ) : (
               t("user.reserve")
             )}

@@ -1,11 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { toast } from "sonner";
+import React from "react";
 import { Loader2, User, Clock, Plus, Trash2 } from "lucide-react";
-import { api } from "@/api";
-import type { AuditLogEntry } from "@/api";
 import { useLanguage } from "@/components/providers/LanguageProvider";
+import { useAuditLogs } from "@/hooks/use-api";
 
 const ACTION_STYLES: Record<string, { bg: string; icon: React.ReactNode }> = {
   CREATE_CONCERT: {
@@ -19,23 +17,9 @@ const ACTION_STYLES: Record<string, { bg: string; icon: React.ReactNode }> = {
 };
 
 export default function AdminHistoryPage() {
-  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const { t } = useLanguage();
-
-  useEffect(() => {
-    async function fetchLogs() {
-      try {
-        const result = await api.getAuditLogs();
-        setLogs(result.data ?? []);
-      } catch {
-        toast.error(t("audit.load_error"));
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchLogs();
-  }, []);
+  const { data, isLoading } = useAuditLogs();
+  const logs = data?.data ?? [];
 
   if (isLoading) {
     return (
